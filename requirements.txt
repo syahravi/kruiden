@@ -1,6 +1,0 @@
-gunicorn
-fastapi
-pandas
-scikit-learn
-jinja2
-python-multipart

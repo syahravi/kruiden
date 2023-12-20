@@ -1,28 +1,27 @@
-from fastapi import FastAPI, HTTPException, Form
-from pydantic import BaseModel
+from flask import Flask, jsonify, request
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 import pandas as pd
 
-app = FastAPI()
+app = Flask(__name__)
 
-# Load and preprocess dataset
+# Load and preprocess dataset (assuming the dataset is loaded once at startup)
 df = pd.read_csv("DatasetHerbal.csv")
 nama_herbal_column_name = 'Nama Herbal'
 khasiat_column_name = 'Khasiat'
 saran_penyajian_column_name = 'Saran Penyajian'
 
 # Save the original case of the columns
-df['original_case_nama_herbal'] = df[nama_herbal_column_name]
-df['original_case_khasiat'] = df[khasiat_column_name]
-df['original_case_saran'] = df[saran_penyajian_column_name]
+df['herbal'] = df[nama_herbal_column_name]
+df['khasiat'] = df[khasiat_column_name]
+df['saran_penyajian'] = df[saran_penyajian_column_name]
 
 # Convert all words to lowercase
 df[nama_herbal_column_name] = df[nama_herbal_column_name].str.lower()
 df[khasiat_column_name] = df[khasiat_column_name].str.lower()
 df[saran_penyajian_column_name] = df[saran_penyajian_column_name].str.lower()
 
-# Combine 'Khasiat' and 'Saran Penyajian' columns into one text
+# Menggabungkan kolom 'Khasiat' dan 'Saran Penyajian' menjadi satu teks
 df['combined_text'] = df[nama_herbal_column_name] + ' ' + df[khasiat_column_name] + ' ' + df[saran_penyajian_column_name]
 
 # TF-IDF Vectorization
@@ -41,20 +40,22 @@ def recommend_rempah(input_text):
     if not nonzero_indices:
         return None
 
-    # Sort and get top 7 recommendations
+    # Sort and get top 10 recommendations
     related_rempah_indices = sorted(nonzero_indices, key=lambda i: cosine_similarities[i], reverse=True)[:7]
 
-    recommended_rempah = df.iloc[related_rempah_indices][['original_case_nama_herbal', 'original_case_khasiat', 'original_case_saran']]
+    recommended_rempah = df.iloc[related_rempah_indices][['herbal', 'khasiat', 'saran_penyajian']]
     return recommended_rempah.to_dict(orient='records')  # Return recommended rempah as a list of dictionaries
 
-class InputPayload(BaseModel):
-    penyakit: str
-
-@app.post("/recommend", response_model=list)
-async def get_recommendation(payload: InputPayload):
-    result = recommend_rempah(payload.penyakit)
+@app.route('/recommend', methods=['POST'])
+def get_recommendation():
+    data = request.json
+    input_penyakit = data.get('penyakit', '')
+    result = recommend_rempah(input_penyakit)
 
     if result is not None:
-        return result
+        return jsonify(result)
     else:
-        raise HTTPException(status_code=404, detail=f'Tidak ada rekomendasi yang sesuai untuk penyakit {payload.penyakit}.')
+        return jsonify({'error': f'Tidak ada rekomendasi yang sesuai untuk penyakit {input_penyakit}.'})
+
+if __name__ == '__main__':
+    app.run(debug=True)
